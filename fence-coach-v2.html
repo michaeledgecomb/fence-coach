@@ -1,0 +1,1675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Fence Coach V1</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --red: #e63030;
+    --red-dim: #7a1a1a;
+    --green: #22c55e;
+    --orange: #f97316;
+    --blue: #38bdf8;
+    --blue-dim: rgba(56,189,248,0.12);
+    --gold: #f59e0b;
+    --gold-dim: rgba(245,158,11,0.12);
+    --white: #f0ece4;
+    --grey: #444;
+    --grey-light: #888;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events:none; z-index:0; opacity:0.5;
+  }
+
+  /* TOP BAR */
+  .top-bar {
+    width:100%; display:flex; justify-content:space-between; align-items:center;
+    padding:20px 24px 0; position:relative; z-index:1; flex-shrink:0;
+  }
+  .app-title { font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:.15em; color:var(--grey-light); }
+  .version   { font-size:10px; color:var(--grey); letter-spacing:.1em; }
+
+  /* TABS */
+  .tabs {
+    width:100%; display:flex; border-bottom:1px solid var(--grey);
+    margin-top:12px; position:relative; z-index:1; flex-shrink:0;
+  }
+  .tab {
+    flex:1; padding:10px 4px; text-align:center;
+    font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:.1em;
+    color:var(--grey-light); cursor:pointer; border-bottom:2px solid transparent;
+    transition:color .15s, border-color .15s;
+  }
+  .tab.active-fence { color:var(--green);  border-bottom-color:var(--green); }
+  .tab.active-pain  { color:var(--orange); border-bottom-color:var(--orange); }
+  .tab.active-bcd   { color:var(--blue);   border-bottom-color:var(--blue); }
+
+  /* PANELS */
+  .panel {
+    display:none; flex-direction:column; align-items:center; justify-content:space-between;
+    flex:1; width:100%; padding:0 24px 28px; position:relative; z-index:1; overflow-y:auto;
+  }
+  .panel.active { display:flex; }
+
+  /* MAIN */
+  .main {
+    display:flex; flex-direction:column; align-items:center;
+    gap:12px; flex:1; justify-content:center; width:100%;
+  }
+
+  /* STATE WORD */
+  .state-word {
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(72px,24vw,130px);
+    letter-spacing:.06em; line-height:1; text-align:center;
+    color:var(--white); transition:color .15s ease;
+  }
+  .state-word.fence { color:var(--green); }
+  .state-word.halt  { color:var(--red); }
+
+  /* EXERCISE NAME */
+  .exercise-name {
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(30px,10vw,52px);
+    letter-spacing:.08em; text-align:center; line-height:1.15;
+    min-height:58px; transition:color .2s;
+  }
+
+  /* RING */
+  .timer-ring-wrap { position:relative; width:160px; height:160px; }
+  .timer-svg { position:absolute; inset:0; transform:rotate(-90deg); }
+  .ring-bg { fill:none; stroke:var(--surface); stroke-width:8; }
+  .ring-progress {
+    fill:none; stroke:var(--green); stroke-width:8; stroke-linecap:round;
+    stroke-dasharray:471; stroke-dashoffset:471;
+    transition:stroke-dashoffset .12s linear, stroke .25s ease;
+  }
+  .ring-progress.halting { stroke:var(--red); }
+  .ring-progress.resting { stroke:var(--orange); }
+  .ring-progress.blue    { stroke:var(--blue); }
+
+  .timer-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .timer-num  { font-family:'Bebas Neue',sans-serif; font-size:50px; letter-spacing:.05em; line-height:1; color:var(--white); }
+  .timer-label { font-size:9px; letter-spacing:.15em; color:var(--grey-light); text-transform:uppercase; }
+
+  .sub-info { font-size:11px; color:var(--grey-light); letter-spacing:.08em; text-align:center; }
+
+  /* PROGRESS BAR */
+  .progress-track { width:100%; max-width:320px; height:4px; background:var(--grey); border-radius:2px; overflow:hidden; }
+  .progress-fill  { height:100%; background:var(--orange); border-radius:2px; transition:width .2s ease; width:0%; }
+
+  /* BUTTONS */
+  .btn-stack { display:flex; flex-direction:column; gap:10px; width:100%; max-width:320px; }
+  .go-btn {
+    width:100%; padding:20px; border:none; border-radius:4px;
+    font-family:'Bebas Neue',sans-serif; font-size:30px; letter-spacing:.12em;
+    cursor:pointer; transition:background .15s ease, transform .1s ease;
+  }
+  .go-btn:active { transform:scale(.97); }
+  .go-btn.green  { background:var(--green);  color:#000; }
+  .go-btn.orange { background:var(--orange); color:#000; }
+  .go-btn.blue   { background:var(--blue);   color:#000; }
+  .go-btn.running { background:#1a1a1a; color:var(--grey-light); cursor:default; border:1px solid var(--grey); }
+  .go-btn.finished { background:var(--grey); color:var(--white); }
+  .cancel-btn {
+    width:100%; padding:12px; background:transparent; color:var(--grey-light);
+    border:1px solid var(--grey); border-radius:4px;
+    font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:.12em;
+    cursor:pointer; transition:background .15s, color .15s; display:none;
+  }
+  .cancel-btn.visible { display:block; }
+  .cancel-btn:active  { background:var(--red-dim); color:var(--white); }
+
+  /* ── BCD SPECIFIC ── */
+
+  /* Slider */
+  .slider-section { width:100%; max-width:320px; flex-shrink:0; }
+  .slider-label-row {
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:6px;
+  }
+  .slider-label { font-size:9px; letter-spacing:.15em; color:var(--grey-light); text-transform:uppercase; }
+  .slider-value {
+    font-family:'Bebas Neue',sans-serif; font-size:22px;
+    letter-spacing:.08em; color:var(--blue);
+  }
+
+  input[type=range] {
+    width:100%; height:4px; -webkit-appearance:none; appearance:none;
+    background:var(--grey); border-radius:2px; outline:none; cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:22px; height:22px; border-radius:50%;
+    background:var(--blue); cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width:22px; height:22px; border-radius:50%; background:var(--blue);
+    border:none; cursor:pointer;
+  }
+
+  /* Cue grid */
+  .cue-section { width:100%; max-width:320px; flex-shrink:0; }
+  .cue-label   { font-size:9px; letter-spacing:.15em; color:var(--grey-light); text-transform:uppercase; margin-bottom:8px; }
+
+  .cue-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+
+  .cue-item {
+    display:flex; align-items:center; gap:8px; padding:9px 10px;
+    border:1px solid var(--grey); border-radius:4px; cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  /* States: off / primary / support */
+  .cue-item.primary { border-color:var(--blue);   background:var(--blue-dim); }
+  .cue-item.support { border-color:var(--gold);   background:var(--gold-dim); }
+
+  .cue-badge {
+    width:22px; height:22px; border-radius:3px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:.05em;
+    border:1px solid var(--grey); color:var(--grey-light);
+    transition:background .15s, border-color .15s, color .15s;
+  }
+  .cue-item.primary .cue-badge { background:var(--blue); border-color:var(--blue); color:#000; }
+  .cue-item.support .cue-badge { background:var(--gold); border-color:var(--gold); color:#000; }
+
+  .cue-text {
+    font-family:'Bebas Neue',sans-serif; font-size:17px;
+    letter-spacing:.08em; color:var(--white);
+  }
+
+  /* Legend */
+  .legend {
+    display:flex; gap:14px; align-items:center;
+    font-size:9px; letter-spacing:.1em; color:var(--grey-light);
+    text-transform:uppercase; width:100%; max-width:320px;
+  }
+  .legend-dot {
+    width:10px; height:10px; border-radius:2px; flex-shrink:0;
+  }
+
+  /* BCD running display */
+  .bcd-cue-display {
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(60px,20vw,110px);
+    letter-spacing:.06em; line-height:1; text-align:center;
+    color:var(--blue); min-height:80px;
+  }
+
+  /* ── SAVED CIRCUITS ── */
+  .circuits-section {
+    width: 100%; max-width: 320px; flex-shrink: 0;
+  }
+
+  .circuits-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .circuits-label {
+    font-size: 9px; letter-spacing: .15em; color: var(--grey-light);
+    text-transform: uppercase;
+  }
+
+  .save-btn {
+    font-family: 'Bebas Neue', sans-serif; font-size: 14px;
+    letter-spacing: .1em; padding: 4px 10px;
+    background: transparent; border: 1px solid var(--blue);
+    color: var(--blue); border-radius: 3px; cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .save-btn:active { background: var(--blue); color: #000; }
+
+  .circuits-empty {
+    font-size: 11px; color: var(--grey); letter-spacing: .05em;
+    padding: 8px 0; text-align: center;
+  }
+
+  .circuit-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 0;
+    border-bottom: 1px solid #222;
+  }
+
+  .circuit-name {
+    flex: 1; font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px; letter-spacing: .08em;
+    color: var(--white); cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: color .15s;
+  }
+  .circuit-name:hover { color: var(--blue); }
+
+  .circuit-name-input {
+    flex: 1; background: #1a1a1a; border: 1px solid var(--blue);
+    color: var(--white); font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px; letter-spacing: .08em; padding: 2px 6px;
+    border-radius: 3px; outline: none;
+  }
+
+  .circ-btn {
+    font-family: 'IBM Plex Mono', monospace; font-size: 9px;
+    letter-spacing: .08em; padding: 3px 7px;
+    border-radius: 3px; cursor: pointer; border: none;
+    flex-shrink: 0; transition: opacity .15s;
+  }
+  .circ-btn:active { opacity: .7; }
+  .circ-btn.edit   { background: var(--grey); color: var(--white); }
+  .circ-btn.del    { background: var(--red-dim); color: var(--red); }
+  .circ-btn.save-inline { background: var(--blue); color: #000; }
+
+
+
+  .burst {
+    position:fixed; inset:0; background:rgba(255,255,255,.04);
+    pointer-events:none; z-index:10; opacity:0;
+    animation:burst-flash .25s ease forwards;
+  }
+  @keyframes burst-flash { 0%{opacity:1} 100%{opacity:0} }
+
+  /* ── VIDEO DRILLS ── */
+  .tab.active-drills { color:#a78bfa; border-bottom-color:#a78bfa; }
+
+  #panelDrills {
+    justify-content: flex-start; gap: 10px; padding-top: 14px;
+  }
+
+  .drills-header {
+    display:flex; justify-content:space-between; align-items:center;
+    width:100%; max-width:360px; flex-shrink:0;
+  }
+
+  .drills-title {
+    font-family:'Bebas Neue',sans-serif; font-size:22px;
+    letter-spacing:.12em; color:var(--white);
+  }
+
+  .add-drill-btn {
+    font-family:'Bebas Neue',sans-serif; font-size:14px;
+    letter-spacing:.1em; padding:6px 12px;
+    background:#a78bfa; color:#000; border:none;
+    border-radius:3px; cursor:pointer; flex-shrink:0;
+    transition:opacity .15s;
+  }
+  .add-drill-btn:active { opacity:.75; }
+
+  .drills-controls {
+    width:100%; max-width:360px; display:flex; flex-direction:column;
+    gap:8px; flex-shrink:0;
+  }
+
+  .drill-search {
+    width:100%; background:#1a1a1a; border:1px solid var(--grey);
+    color:var(--white); font-family:'IBM Plex Mono',monospace;
+    font-size:12px; padding:8px 10px; border-radius:4px; outline:none;
+  }
+  .drill-search:focus { border-color:#a78bfa; }
+
+  .drill-filters { display:flex; gap:6px; flex-wrap:wrap; }
+
+  .filter-btn {
+    padding:5px 10px; background:transparent; border:1px solid var(--grey);
+    color:var(--grey-light); border-radius:3px; cursor:pointer;
+    font-family:'IBM Plex Mono',monospace; font-size:12px;
+    transition:background .15s, border-color .15s, color .15s;
+  }
+  .filter-btn.active { background:#a78bfa; border-color:#a78bfa; color:#000; }
+
+  .drills-list {
+    width:100%; max-width:360px;
+    display:flex; flex-direction:column; gap:10px;
+    overflow-y:auto; flex:1; padding-bottom:8px;
+  }
+
+  .drill-card {
+    display:flex; gap:10px; align-items:flex-start;
+    background:#141414; border:1px solid #222;
+    border-radius:6px; padding:10px; width:100%;
+  }
+
+  .drill-thumb {
+    width:72px; height:54px; object-fit:cover;
+    border-radius:4px; flex-shrink:0; background:#222;
+  }
+
+  .drill-thumb-placeholder {
+    width:72px; height:54px; border-radius:4px;
+    background:#222; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:20px;
+  }
+
+  .drill-content { flex:1; min-width:0; display:flex; flex-direction:column; gap:5px; }
+
+  .drill-link {
+    font-family:'Bebas Neue',sans-serif; font-size:16px;
+    letter-spacing:.06em; color:#a78bfa; text-decoration:none;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;
+  }
+  .drill-link:hover { text-decoration:underline; }
+
+  .drill-tags { display:flex; gap:5px; flex-wrap:wrap; }
+
+  .drill-tag {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:24px; height:24px; border-radius:4px; font-size:13px; flex-shrink:0;
+  }
+  .drill-tag.epee      { background:rgba(56,189,248,.2); color:var(--blue);
+                         font-family:'Bebas Neue',sans-serif; font-size:14px; }
+  .drill-tag.foil      { background:rgba(245,158,11,.2); color:var(--gold);
+                         font-family:'Bebas Neue',sans-serif; font-size:14px; }
+  .drill-tag.footwork  { background:rgba(34,197,94,.15); }
+  .drill-tag.bladework { background:rgba(239,68,68,.15); }
+  .drill-tag.other     { background:rgba(156,163,175,.15); }
+
+  .drill-actions { display:flex; flex-direction:column; gap:5px; flex-shrink:0; }
+
+  .drill-action-btn {
+    font-size:15px; background:transparent; border:none;
+    cursor:pointer; padding:3px; opacity:.5; transition:opacity .15s;
+  }
+  .drill-action-btn:hover { opacity:1; }
+
+  .drills-empty {
+    text-align:center; color:var(--grey); font-size:12px;
+    letter-spacing:.08em; padding:30px 0;
+  }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,.8);
+    z-index:200; display:flex; align-items:center; justify-content:center;
+    padding:20px;
+  }
+
+  .modal-box {
+    background:#1a1a1a; border:1px solid #333; border-radius:8px;
+    width:100%; max-width:340px; padding:20px;
+    display:flex; flex-direction:column; gap:14px;
+    max-height:90dvh; overflow-y:auto;
+  }
+
+  .modal-header {
+    display:flex; justify-content:space-between; align-items:center;
+  }
+
+  .modal-title {
+    font-family:'Bebas Neue',sans-serif; font-size:20px;
+    letter-spacing:.12em; color:var(--white);
+  }
+
+  .modal-close {
+    background:transparent; border:none; color:var(--grey-light);
+    font-size:18px; cursor:pointer; padding:2px 6px; transition:color .15s;
+  }
+  .modal-close:hover { color:var(--white); }
+
+  .modal-field { display:flex; flex-direction:column; gap:5px; }
+
+  .modal-label {
+    font-size:9px; letter-spacing:.15em; color:var(--grey-light);
+    text-transform:uppercase;
+  }
+
+  .modal-input {
+    background:#0d0d0d; border:1px solid var(--grey);
+    color:var(--white); font-family:'IBM Plex Mono',monospace;
+    font-size:12px; padding:8px 10px; border-radius:4px; outline:none; width:100%;
+  }
+  .modal-input:focus { border-color:#a78bfa; }
+
+  .tag-row { display:flex; gap:6px; flex-wrap:wrap; }
+
+  .tag-opt {
+    padding:6px 12px; background:transparent; border:1px solid var(--grey);
+    color:var(--grey-light); border-radius:4px; cursor:pointer;
+    font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:.08em;
+    transition:background .15s, border-color .15s, color .15s;
+  }
+  .tag-opt.selected { background:#a78bfa; border-color:#a78bfa; color:#000; }
+
+  .modal-save-btn {
+    width:100%; padding:14px; background:#a78bfa; color:#000;
+    border:none; border-radius:4px; font-family:'Bebas Neue',sans-serif;
+    font-size:24px; letter-spacing:.12em; cursor:pointer; transition:opacity .15s;
+  }
+  .modal-save-btn:active { opacity:.8; }
+
+  .modal-error {
+    font-size:11px; color:var(--red); letter-spacing:.05em; text-align:center;
+  }
+
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <span class="app-title">Fence Coach</span>
+  <span class="version">V1 · ALPHA</span>
+</div>
+
+<div class="tabs">
+  <div class="tab active-pain" id="tabPain"   onclick="switchTab('pain')">PAIN TRAIN</div>
+  <div class="tab"             id="tabBcd"    onclick="switchTab('bcd')">BCD</div>
+  <div class="tab"             id="tabDrills" onclick="switchTab('drills')">VIDEO DRILLS</div>
+</div>
+
+<!-- ══════ PAIN TRAIN ══════ -->
+<div class="panel active" id="panelPain">
+  <div class="main">
+    <div class="exercise-name" id="ptExercise" style="color:var(--orange)">READY</div>
+    <div class="timer-ring-wrap">
+      <svg class="timer-svg" viewBox="0 0 170 170">
+        <circle class="ring-bg" cx="85" cy="85" r="75"/>
+        <circle class="ring-progress" id="ptRing" cx="85" cy="85" r="75"/>
+      </svg>
+      <div class="timer-center">
+        <div class="timer-num" id="ptTimerNum">30</div>
+        <div class="timer-label" id="ptTimerLabel">seconds</div>
+      </div>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="ptProgressFill"></div></div>
+    <div class="sub-info" id="ptSubInfo">12 EXERCISES · 30 SEC EACH</div>
+  </div>
+  <div class="btn-stack">
+    <button class="go-btn orange" id="ptGoBtn" onclick="startPainTrain()">START</button>
+    <button class="cancel-btn"    id="ptCancelBtn" onclick="cancelPainTrain()">CANCEL</button>
+  </div>
+</div>
+
+<!-- ══════ BCD ══════ -->
+<div class="panel" id="panelBcd">
+
+  <!-- SETUP -->
+  <div id="bcdSetup" style="display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;flex:1;padding-top:14px;">
+
+    <!-- Saved Circuits -->
+    <div class="circuits-section">
+      <div class="circuits-header">
+        <span class="circuits-label">Saved Circuits</span>
+        <button class="save-btn" onclick="saveCircuit()">+ SAVE CURRENT</button>
+      </div>
+      <div id="circuitsList"><div class="circuits-empty">No saved circuits yet</div></div>
+    </div>
+
+    <!-- Duration slider -->
+    <div class="slider-section">
+      <div class="slider-label-row">
+        <span class="slider-label">Duration</span>
+        <span class="slider-value" id="bcdDurVal">30s</span>
+      </div>
+      <input type="range" id="bcdDurSlider" min="15" max="90" step="5" value="30" oninput="bcdDurMove(this.value)">
+    </div>
+
+    <!-- Minimum callouts slider -->
+    <div class="slider-section">
+      <div class="slider-label-row">
+        <span class="slider-label">Min Callouts</span>
+        <span class="slider-value" id="bcdSliderVal">8</span>
+      </div>
+      <input type="range" id="bcdSlider" min="5" max="15" value="8" oninput="bcdSliderMove(this.value)">
+    </div>
+
+    <!-- Cue grid -->
+    <div class="cue-section">
+      <div class="cue-label">Tap to set cues — P = Primary · S = Support</div>
+      <div class="cue-grid" id="bcdCueGrid"></div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+      <div class="legend-dot" style="background:var(--blue)"></div><span>Primary (more frequent)</span>
+      <div class="legend-dot" style="background:var(--gold)"></div><span>Support</span>
+    </div>
+
+    <div class="btn-stack">
+      <button class="go-btn blue" onclick="startBcd()">FENCE</button>
+    </div>
+
+  </div>
+
+  <!-- RUNNING -->
+  <div id="bcdRunning" style="display:none;flex-direction:column;align-items:center;justify-content:space-between;width:100%;flex:1;padding-top:12px;">
+    <div class="main">
+      <div class="bcd-cue-display" id="bcdCueDisplay">FENCE</div>
+      <div class="timer-ring-wrap">
+        <svg class="timer-svg" viewBox="0 0 170 170">
+          <circle class="ring-bg" cx="85" cy="85" r="75"/>
+          <circle class="ring-progress blue" id="bcdRing" cx="85" cy="85" r="75"/>
+        </svg>
+        <div class="timer-center">
+          <div class="timer-num" id="bcdTimerNum">30</div>
+          <div class="timer-label">seconds</div>
+        </div>
+      </div>
+      <div class="sub-info" id="bcdSubInfo">–</div>
+    </div>
+    <div class="btn-stack" id="bcdBtnArea">
+      <button class="cancel-btn visible" onclick="cancelBcd()">CANCEL</button>
+    </div>
+  </div>
+
+</div><!-- /panelBcd -->
+
+<!-- ══════ VIDEO DRILLS ══════ -->
+<div class="panel" id="panelDrills">
+  <div class="drills-header">
+    <span class="drills-title">Video Drills</span>
+    <button class="add-drill-btn" onclick="openDrillModal()">＋ ADD DRILL</button>
+  </div>
+
+  <!-- Search + Filter -->
+  <div class="drills-controls">
+    <input type="text" id="drillSearch" class="drill-search" placeholder="Search titles…" oninput="renderDrills()">
+    <div class="drill-filters">
+      <button class="filter-btn" data-filter="epee"      onclick="toggleFilter(this)">E</button>
+      <button class="filter-btn" data-filter="foil"      onclick="toggleFilter(this)">F</button>
+      <button class="filter-btn" data-filter="footwork"  onclick="toggleFilter(this)">👣</button>
+      <button class="filter-btn" data-filter="bladework" onclick="toggleFilter(this)">⚔</button>
+      <button class="filter-btn" data-filter="other"     onclick="toggleFilter(this)">🔧</button>
+    </div>
+  </div>
+
+  <!-- Drill list -->
+  <div id="drillsList" class="drills-list"></div>
+</div>
+
+<!-- DRILL MODAL -->
+<div id="drillModal" class="modal-overlay" style="display:none;" onclick="modalOverlayClick(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title" id="modalTitle">ADD DRILL</span>
+      <button class="modal-close" onclick="closeDrillModal()">✕</button>
+    </div>
+
+    <div class="modal-field">
+      <label class="modal-label">Title</label>
+      <input type="text" id="drillTitleInput" class="modal-input" placeholder="Name this drill…" maxlength="80">
+    </div>
+
+    <div class="modal-field">
+      <label class="modal-label">YouTube Link</label>
+      <input type="text" id="drillLinkInput" class="modal-input" placeholder="Paste YouTube URL…">
+    </div>
+
+    <div class="modal-field">
+      <label class="modal-label">Weapon</label>
+      <div class="tag-row">
+        <button class="tag-opt" id="tagEpee" onclick="toggleTag('epee')">ÉPÉE</button>
+        <button class="tag-opt" id="tagFoil" onclick="toggleTag('foil')">FOIL</button>
+      </div>
+    </div>
+
+    <div class="modal-field">
+      <label class="modal-label">Category</label>
+      <div class="tag-row">
+        <button class="tag-opt" id="tagFootwork"  onclick="toggleTag('footwork')">FOOTWORK</button>
+        <button class="tag-opt" id="tagBladework" onclick="toggleTag('bladework')">BLADE WORK</button>
+        <button class="tag-opt" id="tagOther"     onclick="toggleTag('other')">OTHER</button>
+      </div>
+    </div>
+
+    <div id="modalError" class="modal-error" style="display:none;"></div>
+
+    <button class="modal-save-btn" onclick="saveDrill()">SAVE</button>
+  </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div id="deleteModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="gap:16px;">
+    <div class="modal-header">
+      <span class="modal-title">DELETE DRILL?</span>
+    </div>
+    <p style="font-size:12px;color:var(--grey-light);text-align:center;line-height:1.6;" id="deleteConfirmText"></p>
+    <div style="display:flex;gap:10px;">
+      <button class="modal-save-btn" style="background:var(--red);flex:1;" onclick="confirmDelete()">DELETE</button>
+      <button class="modal-save-btn" style="background:var(--grey);flex:1;" onclick="closeDeleteModal()">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const CIRC = 2 * Math.PI * 75; // 471.24
+
+  // ── AUDIO / SPEECH ──────────────────────────────────────────────
+  let audioCtx = null;
+
+  function getAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playBeep(freq=880, dur=0.25) {
+    const ctx=getAudioCtx(), now=ctx.currentTime;
+    const osc=ctx.createOscillator(), g=ctx.createGain();
+    osc.type='sine'; osc.frequency.setValueAtTime(freq,now);
+    g.gain.setValueAtTime(0.001,now);
+    g.gain.exponentialRampToValueAtTime(1.0,now+0.01);
+    g.gain.setValueAtTime(1.0,now+dur*0.4);
+    g.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(now); osc.stop(now+dur);
+  }
+
+  function playWhistle() {
+    const ctx = getAudioCtx(), now = ctx.currentTime;
+    const dur = 0.19;
+    // Main tone — starts high, slight frequency drop for "tweet" shape
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(2600, now);
+    osc.frequency.linearRampToValueAtTime(2350, now + dur * 0.6);
+    osc.frequency.linearRampToValueAtTime(2200, now + dur);
+    // Vibrato LFO — gives it the warble of a pea whistle
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.setValueAtTime(9, now);
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.setValueAtTime(0, now);
+    lfoGain.gain.linearRampToValueAtTime(55, now + 0.06);
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc.frequency);
+    // Amplitude — hard attack, full sustain, clean cutoff
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.exponentialRampToValueAtTime(1.1, now + 0.008);
+    gain.gain.setValueAtTime(1.1, now + dur - 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    // Harmonic layer for body
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(5200, now);
+    const gain2 = ctx.createGain();
+    gain2.gain.setValueAtTime(0.18, now);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + dur * 0.7);
+    osc.connect(gain);   gain.connect(ctx.destination);
+    osc2.connect(gain2); gain2.connect(ctx.destination);
+    osc.start(now);  osc.stop(now + dur);
+    osc2.start(now); osc2.stop(now + dur);
+    lfo.start(now);  lfo.stop(now + dur);
+  }
+
+  let voicesReady=false, pendingSpeech=null;
+
+  function pickVoice() {
+    const voices = window.speechSynthesis.getVoices();
+    return voices.find(v => v.name.includes('Google') && v.lang === 'en-US')
+        || voices.find(v => v.name.includes('Google') && v.lang.startsWith('en'))
+        || voices.find(v => v.lang === 'en-US')
+        || voices.find(v => v.lang.startsWith('en'))
+        || null;
+  }
+
+  function doSpeak(text) {
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.rate   = 1.25;
+    utt.pitch  = 1.15;
+    utt.volume = 1.0;
+    const v = pickVoice();
+    if (v) utt.voice = v;
+    window.speechSynthesis.speak(utt);
+  }
+  function speak(text) {
+    if(!window.speechSynthesis) return;
+    if(voicesReady) doSpeak(text); else pendingSpeech=text;
+  }
+  if(window.speechSynthesis) {
+    const chk=()=>{
+      if(window.speechSynthesis.getVoices().length>0){
+        voicesReady=true;
+        if(pendingSpeech){doSpeak(pendingSpeech);pendingSpeech=null;}
+      }
+    };
+    window.speechSynthesis.onvoiceschanged=chk; chk();
+  }
+
+  function flashBurst() {
+    const b=document.createElement('div'); b.className='burst';
+    document.body.appendChild(b); setTimeout(()=>b.remove(),300);
+  }
+
+  function setRing(el,fraction,cls) {
+    el.style.strokeDasharray=CIRC;
+    el.style.strokeDashoffset=CIRC*(1-Math.min(1,Math.max(0,fraction)));
+    el.className='ring-progress'+(cls?' '+cls:'');
+  }
+
+  // ── TABS ────────────────────────────────────────────────────────
+  function switchTab(which) {
+    ['pain','bcd','drills'].forEach(t => {
+      const cap = t.charAt(0).toUpperCase() + t.slice(1);
+      document.getElementById('panel'+cap).classList.toggle('active', t === which);
+      document.getElementById('tab'+cap).className = 'tab' + (t === which ? ' active-'+t : '');
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  //  PAIN TRAIN
+  // ════════════════════════════════════════════════════════════════
+  const PT_EXERCISES=['PUSH-UP','CRUNCH','PLANK','LEG LIFTS',
+    'RIGHT ARM PLANK','HOLD LEGS 6 INCHES','LEFT ARM PLANK',
+    'HORIZONTAL SCISSORS','SUPERMAN','VERTICAL SCISSORS','AQUAMAN','MOUNTAIN CLIMBER'];
+  const PT_WORK=30,PT_REST=5;
+  let ptRunning=false,ptInterval=null,ptStep=0,ptPhase='work';
+  const ptExercise=document.getElementById('ptExercise');
+  const ptTimerNum=document.getElementById('ptTimerNum');
+  const ptTimerLabel=document.getElementById('ptTimerLabel');
+  const ptRing=document.getElementById('ptRing');
+  const ptGoBtn=document.getElementById('ptGoBtn');
+  const ptCancelBtn=document.getElementById('ptCancelBtn');
+  const ptSubInfo=document.getElementById('ptSubInfo');
+  const ptProgressFill=document.getElementById('ptProgressFill');
+  setRing(ptRing,0,'');
+
+  function ptReset() {
+    ptRunning=false;ptStep=0;ptPhase='work';
+    ptExercise.textContent='READY';ptExercise.style.color='var(--orange)';
+    ptTimerNum.textContent=PT_WORK;ptTimerLabel.textContent='seconds';
+    setRing(ptRing,0,'');ptProgressFill.style.width='0%';
+    ptSubInfo.textContent='12 EXERCISES · 30 SEC EACH';
+    ptGoBtn.classList.remove('running','finished');ptGoBtn.textContent='START';
+    ptCancelBtn.classList.remove('visible');
+  }
+
+  function ptRunStep() {
+    const total=PT_EXERCISES.length;
+    if(ptStep>=total){
+      ptRunning=false;
+      ptExercise.textContent='DONE!';ptExercise.style.color='var(--green)';
+      ptTimerNum.textContent='✓';setRing(ptRing,1,'');
+      ptProgressFill.style.width='100%';ptSubInfo.textContent='PAIN TRAIN COMPLETE';
+      speak('Pain Train complete. Great work.');
+      playBeep(523,.3);setTimeout(()=>playBeep(659,.3),350);setTimeout(()=>playBeep(784,.4),700);
+      ptGoBtn.classList.remove('running');ptGoBtn.classList.add('finished');ptGoBtn.textContent='AGAIN';
+      ptCancelBtn.classList.remove('visible');
+      setTimeout(ptReset,5000);return;
+    }
+    const name=PT_EXERCISES[ptStep];
+    const duration=ptPhase==='work'?PT_WORK:PT_REST;
+    if(ptPhase==='work'){
+      ptExercise.textContent=name;ptExercise.style.color='var(--orange)';
+      ptSubInfo.textContent=`EXERCISE ${ptStep+1} OF ${total}`;
+      ptTimerLabel.textContent='seconds';
+      speak(name.toLowerCase().replace('6 inches','six inches'));
+      playBeep(660,.12);setRing(ptRing,0,'');
+    } else {
+      ptExercise.textContent='REST';ptExercise.style.color='var(--grey-light)';
+      ptSubInfo.textContent=`NEXT: ${PT_EXERCISES[ptStep]}`;
+      ptTimerLabel.textContent='get ready';
+      speak('Rest. Next: '+PT_EXERCISES[ptStep].toLowerCase());
+      playBeep(440,.12);setRing(ptRing,0,'resting');
+    }
+    const t0=performance.now();clearInterval(ptInterval);
+    ptInterval=setInterval(()=>{
+      const e=(performance.now()-t0)/1000,r=Math.max(0,duration-e);
+      ptTimerNum.textContent=Math.ceil(r);
+      setRing(ptRing,e/duration,ptPhase==='rest'?'resting':(r<=5?'halting':''));
+      const done=ptPhase==='work'?ptStep+e/PT_WORK:ptStep;
+      ptProgressFill.style.width=Math.min(100,(done/total)*100)+'%';
+      if(e>=duration){
+        clearInterval(ptInterval);
+        if(ptPhase==='work'){ptStep++;ptPhase=ptStep<total?'rest':'work';ptRunStep();}
+        else{ptPhase='work';ptRunStep();}
+      }
+    },80);
+  }
+
+  function startPainTrain() {
+    if(ptRunning) return;
+    getAudioCtx();ptRunning=true;ptStep=0;ptPhase='work';
+    ptGoBtn.classList.add('running');ptGoBtn.textContent='RUNNING...';
+    ptCancelBtn.classList.add('visible');ptRunStep();
+  }
+
+  function cancelPainTrain() {
+    if(!ptRunning) return;
+    clearInterval(ptInterval);
+    window.speechSynthesis&&window.speechSynthesis.cancel();ptReset();
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  //  BCD
+  // ════════════════════════════════════════════════════════════════
+
+  // Order matches grid layout (2-column, top-to-bottom)
+  const BCD_CUES = [
+    {id:'whistle',  label:'Whistle',      speak:null},
+    {id:'switch',   label:'Switch',       speak:'Switch'},
+    {id:'go',       label:'Go',           speak:'Go'},
+    {id:'fleche',   label:'Fleche',       speak:'Fleche'},
+    {id:'advance',  label:'Advance',      speak:'Advance'},
+    {id:'crossfwd', label:'Check Fwd',   speak:'Check forward'},
+    {id:'retreat',  label:'Retreat',      speak:'Retreat'},
+    {id:'crossbk',  label:'Check Back',   speak:'Check back'},
+    {id:'lunge',    label:'Lunge',        speak:'Lunge'},
+    {id:'recover',  label:'Recover',      speak:'Recover'},
+    {id:'parry',    label:'Parry',        speak:'Parry'},
+    {id:'halfstep', label:'Half-Step',    speak:'Half step'},
+    {id:'balestra', label:'Balestra',     speak:'Balestra'},
+    {id:'redouble', label:'Redouble',     speak:'Redouble'},
+    {id:'fast',     label:'Fast',         speak:'Fast'},
+    {id:'slow',     label:'Slow',         speak:'Slow'},
+    {id:'large',    label:'Large',        speak:'Large'},
+    {id:'small',    label:'Small',        speak:'Small'},
+  ];
+
+  const PRIMARY_W = 3, SUPPORT_W = 2;
+
+  // cueState: 'off' | 'primary' | 'support'
+  let cueState = {}; // start all off
+  BCD_CUES.forEach(c => cueState[c.id] = 'off');
+
+  let bcdDuration    = 30;
+  let bcdMinCallouts = 8;
+  let bcdRunning     = false;
+  let bcdInterval    = null;
+  let bcdSchedule    = [];
+  let bcdScheduleIdx = 0;
+
+  const bcdSlider    = document.getElementById('bcdSlider');
+  const bcdSliderVal = document.getElementById('bcdSliderVal');
+  const bcdSetup     = document.getElementById('bcdSetup');
+  const bcdRunning_  = document.getElementById('bcdRunning');
+  const bcdCueDisplay= document.getElementById('bcdCueDisplay');
+  const bcdTimerNum  = document.getElementById('bcdTimerNum');
+  const bcdSubInfo   = document.getElementById('bcdSubInfo');
+  const bcdRing      = document.getElementById('bcdRing');
+  const bcdBtnArea   = document.getElementById('bcdBtnArea');
+  setRing(bcdRing, 0, 'blue');
+
+  // ── Build cue grid ──────────────────────────────────────────────
+  const grid = document.getElementById('bcdCueGrid');
+  BCD_CUES.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'cue-item';
+    item.id = 'cue-item-' + c.id;
+    item.innerHTML = `<div class="cue-badge" id="badge-${c.id}"></div>
+                      <div class="cue-text">${c.label}</div>`;
+    item.onclick = () => cycleCue(c.id);
+    grid.appendChild(item);
+  });
+
+  function setCueVisual(id, state) {
+    const item  = document.getElementById('cue-item-' + id);
+    const badge = document.getElementById('badge-' + id);
+    if (!item) return;
+    item.className = 'cue-item' + (state !== 'off' ? ' ' + state : '');
+    badge.textContent = state === 'primary' ? 'P' : state === 'support' ? 'S' : '';
+  }
+
+  function forceState(id, state) {
+    cueState[id] = state;
+    setCueVisual(id, state);
+  }
+
+  function cycleCue(id) {
+    const cur  = cueState[id] || 'off';
+    const next = cur === 'off' ? 'primary' : cur === 'primary' ? 'support' : 'off';
+    cueState[id] = next;
+    setCueVisual(id, next);
+
+    // ── Auto-linking rules ────────────────────────────────────────
+
+    // ADVANCE ↔ RETREAT: always mirror each other
+    if (id === 'advance') forceState('retreat', next);
+    if (id === 'retreat') forceState('advance', next);
+
+    // RECOVER requires LUNGE at same priority; turning RECOVER off leaves LUNGE alone
+    if (id === 'recover' && next !== 'off') forceState('lunge', next);
+
+    // Turning LUNGE off while RECOVER is on → also turn RECOVER off
+    if (id === 'lunge' && next === 'off' && cueState['recover'] !== 'off') {
+      forceState('recover', 'off');
+    }
+  }
+
+  // ── Duration / slider ───────────────────────────────────────────
+  // Compute dynamic callout range based on duration
+  function calloutRange(dur) {
+    return {
+      min: Math.max(3, Math.round(dur / 5)),
+      max: Math.round(dur / 2)
+    };
+  }
+
+  function bcdDurMove(val) {
+    const sec = parseInt(val);
+    const oldRange = calloutRange(bcdDuration);
+    const ratio = (bcdMinCallouts - oldRange.min) / Math.max(1, oldRange.max - oldRange.min);
+    bcdDuration = sec;
+    document.getElementById('bcdDurVal').textContent = sec + 's';
+    const newRange = calloutRange(sec);
+    bcdSlider.min = newRange.min;
+    bcdSlider.max = newRange.max;
+    const newVal = Math.min(newRange.max, Math.max(newRange.min, Math.round(newRange.min + ratio * (newRange.max - newRange.min))));
+    bcdSlider.value = newVal;
+    bcdMinCallouts  = newVal;
+    bcdSliderVal.textContent = newVal;
+  }
+
+  // Keep bcdSelectDur as alias for saved circuit loading
+  function bcdSelectDur(sec) {
+    document.getElementById('bcdDurSlider').value = sec;
+    bcdDurMove(sec);
+  }
+
+  function bcdSliderMove(val) {
+    bcdMinCallouts = parseInt(val);
+    bcdSliderVal.textContent = val;
+  }
+
+  // Initialise callout slider range for default 30s
+  (function() {
+    const r = calloutRange(30);
+    bcdSlider.min = r.min; bcdSlider.max = r.max;
+  })();
+
+  // ── Schedule generation ─────────────────────────────────────────
+  function generateSchedule(minCount, dur) {
+    const recoverOn    = cueState['recover'] !== 'off';
+    const advRetrOn    = cueState['advance'] !== 'off';
+    const flecheOn     = cueState['fleche']  !== 'off';
+    const recover_     = BCD_CUES.find(c => c.id === 'recover');
+
+    // FLECHE-last: fleche + advance/retreat + at least one other
+    const otherCues    = BCD_CUES.filter(c =>
+      !['fleche','advance','retreat','recover'].includes(c.id) && cueState[c.id] !== 'off');
+    const flecheIsLast = flecheOn && advRetrOn && otherCues.length > 0;
+
+    // Spacing mode
+    const { min: dynMin, max: dynMax } = calloutRange(dur);
+    const sliderMid   = Math.round((dynMin + dynMax) / 2);
+    const isLowerHalf = minCount <= sliderMid;
+
+    // Total cue count: minCount to minCount+10
+    const totalCount = minCount + Math.floor(Math.random() * 11);
+
+    // Normal pool (excludes recover; excludes fleche if last-cue)
+    function buildPool() {
+      const pool = [];
+      BCD_CUES.forEach(c => {
+        if (c.id === 'recover') return;
+        if (flecheIsLast && c.id === 'fleche') return;
+        const st = cueState[c.id] || 'off';
+        if (st === 'primary')      for (let i=0;i<PRIMARY_W;i++) pool.push(c);
+        else if (st === 'support') for (let i=0;i<SUPPORT_W;i++) pool.push(c);
+      });
+      return pool;
+    }
+    const fullPool = buildPool();
+    if (fullPool.length === 0) return [];
+
+    // Generate constrained sequence
+    const sequence   = [];
+    let lastDir      = advRetrOn ? (Math.random() < 0.5 ? 'advance' : 'retreat') : null;
+    const openerDirSeed = lastDir; // capture BEFORE loop mutates it
+    let awaitRecover = false;
+    let attempts     = 0;
+    while (sequence.length < totalCount && attempts < totalCount * 20) {
+      attempts++;
+      if (awaitRecover) { sequence.push(recover_); awaitRecover = false; continue; }
+      let eligible = fullPool.filter(c => {
+        if (c.id === 'advance' && lastDir === 'advance') return false;
+        if (c.id === 'retreat' && lastDir === 'retreat') return false;
+        return true;
+      });
+      if (eligible.length === 0) eligible = fullPool;
+      const pick = eligible[Math.floor(Math.random() * eligible.length)];
+      sequence.push(pick);
+      if (pick.id === 'advance')      lastDir = 'advance';
+      else if (pick.id === 'retreat') lastDir = 'retreat';
+      if (pick.id === 'lunge' && recoverOn) awaitRecover = true;
+    }
+    if (awaitRecover) sequence.push(recover_);
+
+    // ── Assign timestamps ──────────────────────────────────────────
+    const RECOVER_MAX    = 3.0;   // 0.5–3.0s after LUNGE
+    const LUNGE_DEADLINE = flecheIsLast
+      ? dur - RECOVER_MAX - 1.5
+      : dur - RECOVER_MAX - 0.5;
+
+    const margin       = 1.5;
+    const recoverCount = sequence.filter(c => c.id === 'recover').length;
+    const normalCount  = sequence.length - recoverCount;
+    const flecheBuffer  = flecheIsLast ? 2.0 : 0;
+    // Don't subtract a recoverBudget — RECOVER timestamps anchor directly to
+    // their LUNGE via lastLungeT, so they don't compete for normal spacing.
+    const normalBudget  = Math.max(2, (dur - margin * 2) - flecheBuffer);
+
+    // Final window: 5s for 30s mode, 10s for 60s mode (upper half only, 15%)
+    const finalWindow      = Math.max(3, Math.round(dur / 6));
+    const finalWindowStart = dur - finalWindow;
+
+    let finalSlots = 0, earlySlots = normalCount;
+    let earlyEnd   = flecheIsLast ? finalWindowStart - 1.0 : finalWindowStart;
+    if (!isLowerHalf) {
+      finalSlots = Math.max(1, Math.ceil(normalCount * 0.15));
+      earlySlots = normalCount - finalSlots;
+    }
+
+    const earlyBudget  = isLowerHalf ? normalBudget : Math.max(2, normalBudget * (earlySlots / Math.max(normalCount, 1)));
+    const finalBudget  = finalSlots > 0 ? (finalWindow - (flecheIsLast ? 1.5 : 0.5)) : 0;
+    const earlySpacing = earlyBudget / Math.max(earlySlots, 1);
+    const finalSpacing = finalSlots > 0 ? finalBudget / finalSlots : 0;
+
+    const result   = [];
+    let normalSlot = 0, finalSlotIdx = 0;
+    let lastLungeT = null; // explicitly tracks the most recent LUNGE timestamp
+
+    // Opener — use openerDirSeed (captured BEFORE sequence loop mutated lastDir)
+    if (advRetrOn) {
+      const opener = openerDirSeed === 'advance'
+        ? BCD_CUES.find(c => c.id === 'advance')
+        : BCD_CUES.find(c => c.id === 'retreat');
+      result.push({ t: parseFloat((0.4 + Math.random() * 0.5).toFixed(2)), cue: opener });
+    }
+
+    sequence.forEach(cue => {
+      if (cue.id === 'recover') {
+        // Always anchored to lastLungeT — never to any other preceding cue
+        const base  = lastLungeT !== null ? lastLungeT : margin;
+        const delay = 0.5 + Math.random() * 2.5;   // 0.5–3.0s after LUNGE
+        const t     = Math.min(base + delay, dur - 0.3); // must fire before HALT
+        result.push({ t: parseFloat(t.toFixed(2)), cue });
+      } else {
+        const isFinalSlot = !isLowerHalf && normalSlot >= earlySlots;
+        let t;
+        if (isFinalSlot) {
+          const base   = finalWindowStart + finalSlotIdx * finalSpacing;
+          const jitter = Math.random() * finalSpacing * 0.5;
+          t = Math.min(base + jitter, flecheIsLast ? dur - 1.5 : dur - margin);
+          finalSlotIdx++;
+        } else if (isLowerHalf) {
+          const base   = margin + normalSlot * earlySpacing;
+          const jitter = earlySpacing * 0.06 * (Math.random() - 0.5);
+          t = base + jitter;
+        } else {
+          const base   = margin + normalSlot * earlySpacing;
+          const jitter = Math.random() * earlySpacing * 0.7;
+          t = base + jitter;
+        }
+        const cap = cue.id === 'lunge' ? LUNGE_DEADLINE : (isFinalSlot ? dur - 0.5 : earlyEnd);
+        const finalT = parseFloat(Math.min(t, cap).toFixed(2));
+        if (cue.id === 'lunge') lastLungeT = finalT; // record for RECOVER
+        result.push({ t: finalT, cue });
+        normalSlot++;
+      }
+    });
+
+    if (flecheIsLast) {
+      result.push({ t: parseFloat((dur - 1.0).toFixed(2)), cue: BCD_CUES.find(c => c.id === 'fleche') });
+    }
+
+    result.sort((a, b) => a.t - b.t);
+
+    // ── Enforce LUNGE→RECOVER adjacency in final sorted order ─────
+    // After sorting by timestamp, any cue that landed between a LUNGE and its
+    // paired RECOVER gets bumped to just after the RECOVER.
+    if (recoverOn) {
+      let i = 0;
+      while (i < result.length - 1) {
+        if (result[i].cue.id === 'lunge') {
+          // Find the paired RECOVER (next recover entry after this lunge)
+          let recIdx = -1;
+          for (let j = i + 1; j < result.length; j++) {
+            if (result[j].cue.id === 'recover') { recIdx = j; break; }
+          }
+          if (recIdx > i + 1) {
+            // There are cues between lunge and recover — move them after recover
+            const recoverEntry = result.splice(recIdx, 1)[0];
+            result.splice(i + 1, 0, recoverEntry);
+            // Now recoverEntry is at i+1. Re-timestamp anything after it that
+            // was originally between lunge and recover — nudge them after recover.
+            const recT = recoverEntry.t;
+            for (let j = i + 2; j < result.length; j++) {
+              if (result[j].t < recT + 0.3) {
+                result[j] = { ...result[j], t: parseFloat((recT + 0.3 + (j - i - 1) * 0.2).toFixed(2)) };
+              } else {
+                break;
+              }
+            }
+          }
+          i += 2; // skip past the lunge+recover pair
+        } else {
+          i++;
+        }
+      }
+    }
+
+    return result;
+  }
+
+
+  // ── Start / cancel / reset ──────────────────────────────────────
+  let bcdDirReminderTimeout  = null;
+  let bcdDisplayResetTimeout = null;
+
+  // Cues that always flash then blank after 0.75s (no persistent display, no direction check)
+  const FLASH_BLANK = new Set(['switch','fleche']);
+
+  function startBcd() {
+    const anySelected = BCD_CUES.some(c => cueState[c.id] !== 'off');
+    if (!anySelected) { bcdSubInfo.textContent = 'SELECT AT LEAST ONE CUE'; return; }
+
+    getAudioCtx();
+    bcdRunning     = true;
+    bcdSchedule    = generateSchedule(bcdMinCallouts, bcdDuration);
+    bcdScheduleIdx = 0;
+
+    bcdSetup.style.display    = 'none';
+    bcdRunning_.style.display = 'flex';
+    bcdBtnArea.innerHTML = '<button class="cancel-btn visible" onclick="cancelBcd()">CANCEL</button>';
+
+    bcdTimerNum.textContent = bcdDuration;
+    setRing(bcdRing, 0, 'blue');
+
+    const primCount = BCD_CUES.filter(c => cueState[c.id] === 'primary').length;
+    const suppCount = BCD_CUES.filter(c => cueState[c.id] === 'support').length;
+    bcdSubInfo.textContent = `${bcdSchedule.length} CUES · ${primCount}P ${suppCount}S`;
+
+    startBcdWithSchedule(bcdSchedule);
+  }
+
+  function cancelBcd() {
+    clearInterval(bcdInterval);
+    clearTimeout(bcdDirReminderTimeout);
+    clearTimeout(bcdDisplayResetTimeout);
+    window.speechSynthesis && window.speechSynthesis.cancel();
+    bcdRunning = false;
+    bcdCueDisplay.textContent = 'FENCE'; bcdCueDisplay.style.color = 'var(--blue)';
+    setRing(bcdRing, 0, 'blue'); bcdTimerNum.textContent = bcdDuration;
+    bcdRunning_.style.display = 'none';
+    bcdBtnArea.innerHTML = '<button class="cancel-btn visible" onclick="cancelBcd()">CANCEL</button>';
+    bcdSetup.style.display = 'flex';
+  }
+
+  function repeatBcd() {
+    // Rerun the exact same schedule — no regeneration
+    clearTimeout(bcdDirReminderTimeout);
+    clearTimeout(bcdDisplayResetTimeout);
+    bcdBtnArea.innerHTML = '<button class="cancel-btn visible" onclick="cancelBcd()">CANCEL</button>';
+    startBcdWithSchedule(bcdSchedule);
+  }
+
+  function startBcdWithSchedule(schedule) {
+    getAudioCtx();
+    bcdRunning     = true;
+    bcdScheduleIdx = 0;
+
+    bcdTimerNum.textContent = bcdDuration;
+    setRing(bcdRing, 0, 'blue');
+
+    bcdCueDisplay.textContent = 'FENCE';
+    bcdCueDisplay.style.color = 'var(--blue)';
+    speak('Fence');
+
+    const advRetrOnRT     = cueState['advance'] !== 'off';
+    const recoverOnRT     = cueState['recover'] !== 'off';
+    const showDirReminder = advRetrOnRT && recoverOnRT;
+    let lastDirLabel = null;
+
+    const t0 = performance.now();
+
+    bcdInterval = setInterval(() => {
+      const e = (performance.now() - t0) / 1000;
+      const r = Math.max(0, bcdDuration - e);
+      bcdTimerNum.textContent = Math.ceil(r);
+      setRing(bcdRing, e / bcdDuration, r <= 5 ? 'halting' : 'blue');
+
+      while (bcdScheduleIdx < schedule.length && e >= schedule[bcdScheduleIdx].t) {
+        const entry = schedule[bcdScheduleIdx++];
+        const id    = entry.cue.id;
+        const label = entry.cue.label.toUpperCase();
+
+        clearTimeout(bcdDirReminderTimeout);
+        clearTimeout(bcdDisplayResetTimeout);
+
+        if (id === 'advance' || id === 'retreat') lastDirLabel = label;
+
+        bcdCueDisplay.textContent = label;
+        bcdCueDisplay.style.color = 'var(--blue)';
+        entry.cue.speak ? speak(entry.cue.speak) : playWhistle();
+
+        if (FLASH_BLANK.has(id)) {
+          bcdDisplayResetTimeout = setTimeout(() => {
+            if (bcdRunning) { bcdCueDisplay.textContent = ' '; }
+          }, 750);
+
+        } else if (id === 'whistle' || id === 'go') {
+          if (advRetrOnRT && lastDirLabel) {
+            const d = lastDirLabel;
+            bcdDirReminderTimeout = setTimeout(() => {
+              if (bcdRunning) { bcdCueDisplay.textContent = d; bcdCueDisplay.style.color = 'var(--grey-light)'; }
+            }, 750);
+          } else {
+            bcdDisplayResetTimeout = setTimeout(() => {
+              if (bcdRunning) { bcdCueDisplay.textContent = ' '; }
+            }, 750);
+          }
+
+        } else if (id === 'recover') {
+          if (showDirReminder && lastDirLabel) {
+            const d = lastDirLabel;
+            bcdDirReminderTimeout = setTimeout(() => {
+              if (bcdRunning) { bcdCueDisplay.textContent = d; bcdCueDisplay.style.color = 'var(--grey-light)'; }
+            }, 750);
+          }
+
+        } else if (id === 'lunge' && !recoverOnRT) {
+          // LUNGE without RECOVER: same logic as Check Fwd/Back
+          if (advRetrOnRT && lastDirLabel) {
+            const d = lastDirLabel;
+            bcdDirReminderTimeout = setTimeout(() => {
+              if (bcdRunning) { bcdCueDisplay.textContent = d; bcdCueDisplay.style.color = 'var(--grey-light)'; }
+            }, 750);
+          } else {
+            bcdDisplayResetTimeout = setTimeout(() => {
+              if (bcdRunning) { bcdCueDisplay.textContent = ' '; }
+            }, 750);
+          }
+
+        } else if (id === 'crossfwd' || id === 'crossbk') {
+          if (advRetrOnRT && lastDirLabel) {
+            const d = lastDirLabel;
+            bcdDirReminderTimeout = setTimeout(() => {
+              if (bcdRunning) { bcdCueDisplay.textContent = d; bcdCueDisplay.style.color = 'var(--grey-light)'; }
+            }, 750);
+          } else {
+            bcdDisplayResetTimeout = setTimeout(() => {
+              if (bcdRunning) { bcdCueDisplay.textContent = ' '; }
+            }, 750);
+          }
+        }
+        // advance, retreat, lunge+recover — display persists until next cue
+      }
+
+      if (e >= bcdDuration) {
+        clearInterval(bcdInterval);
+        clearTimeout(bcdDirReminderTimeout);
+        clearTimeout(bcdDisplayResetTimeout);
+        bcdRunning = false;
+        bcdCueDisplay.textContent = 'HALT';
+        bcdCueDisplay.style.color = 'var(--red)';
+        speak('Halt');
+        setRing(bcdRing, 1, 'halting');
+        bcdTimerNum.textContent = '0';
+        setTimeout(() => {
+          bcdBtnArea.innerHTML = `
+            <button class="go-btn blue" onclick="resetBcd()">RESET</button>
+            <button class="go-btn" style="background:var(--grey-light);color:#000;" onclick="repeatBcd()">REPEAT</button>`;
+        }, 1500);
+      }
+    }, 80);
+  }
+
+  function resetBcd() {
+    clearTimeout(bcdDirReminderTimeout);
+    clearTimeout(bcdDisplayResetTimeout);
+    bcdRunning = false;
+    bcdCueDisplay.textContent = 'FENCE'; bcdCueDisplay.style.color = 'var(--blue)';
+    setRing(bcdRing, 0, 'blue'); bcdTimerNum.textContent = bcdDuration;
+    bcdRunning_.style.display = 'none';
+    bcdBtnArea.innerHTML = '<button class="cancel-btn visible" onclick="cancelBcd()">CANCEL</button>';
+    bcdSetup.style.display = 'flex';
+  }
+  // ════════════════════════════════════════════════════════════════
+  //  SAVED CIRCUITS
+  // ════════════════════════════════════════════════════════════════
+
+  const STORAGE_KEY = 'fenceCoachCircuits';
+
+  function loadCircuits() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    catch { return []; }
+  }
+
+  function persistCircuits(circuits) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(circuits));
+  }
+
+  function nextCircuitName(circuits) {
+    // Find the highest existing "Circuit #N" number
+    let max = 0;
+    circuits.forEach(c => {
+      const m = c.name.match(/^Circuit #(\d+)$/i);
+      if (m) max = Math.max(max, parseInt(m[1]));
+    });
+    return `Circuit #${max + 1}`;
+  }
+
+  function saveCircuit() {
+    const circuits = loadCircuits();
+    const name = nextCircuitName(circuits);
+    const circuit = {
+      id:       Date.now(),
+      name,
+      duration: bcdDuration,
+      minCalls: bcdMinCallouts,
+      cues:     { ...cueState }
+    };
+    circuits.push(circuit);
+    persistCircuits(circuits);
+    renderCircuits();
+  }
+
+  function loadCircuit(id) {
+    const circuits = loadCircuits();
+    const c = circuits.find(x => x.id === id);
+    if (!c) return;
+
+    // Apply duration
+    bcdSelectDur(c.duration);
+
+    // Apply slider
+    bcdSlider.min   = c.duration === 30 ? 5  : 10;
+    bcdSlider.max   = c.duration === 30 ? 15 : 30;
+    bcdSlider.value = c.minCalls;
+    bcdMinCallouts  = c.minCalls;
+    bcdSliderVal.textContent = c.minCalls;
+
+    // Apply cue states
+    BCD_CUES.forEach(cue => {
+      cueState[cue.id] = c.cues[cue.id] || 'off';
+      setCueVisual(cue.id, cueState[cue.id]);
+    });
+  }
+
+  function deleteCircuit(id) {
+    let circuits = loadCircuits();
+    circuits = circuits.filter(c => c.id !== id);
+    persistCircuits(circuits);
+    renderCircuits();
+  }
+
+  function startRename(id) {
+    const circuits = loadCircuits();
+    const c = circuits.find(x => x.id === id);
+    if (!c) return;
+
+    const row = document.getElementById('row-' + id);
+    row.innerHTML = `
+      <input class="circuit-name-input" id="rename-${id}" value="${c.name}" maxlength="40">
+      <button class="circ-btn save-inline" onclick="commitRename(${id})">SAVE</button>
+      <button class="circ-btn edit" onclick="renderCircuits()">CANCEL</button>`;
+    const input = document.getElementById('rename-' + id);
+    input.focus(); input.select();
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') commitRename(id);
+      if (e.key === 'Escape') renderCircuits();
+    });
+  }
+
+  function commitRename(id) {
+    const input = document.getElementById('rename-' + id);
+    if (!input) return;
+    const newName = input.value.trim() || `Circuit #${id}`;
+    const circuits = loadCircuits();
+    const c = circuits.find(x => x.id === id);
+    if (c) { c.name = newName; persistCircuits(circuits); }
+    renderCircuits();
+  }
+
+  function renderCircuits() {
+    const circuits = loadCircuits();
+    const list = document.getElementById('circuitsList');
+
+    if (circuits.length === 0) {
+      list.innerHTML = '<div class="circuits-empty">No saved circuits yet</div>';
+      return;
+    }
+
+    // Sort alphabetically by name
+    const sorted = [...circuits].sort((a, b) => a.name.localeCompare(b.name));
+
+    list.innerHTML = sorted.map(c => `
+      <div class="circuit-row" id="row-${c.id}">
+        <span class="circuit-name" onclick="loadCircuit(${c.id})" title="Click to load">${c.name}</span>
+        <button class="circ-btn edit" onclick="startRename(${c.id})">EDIT</button>
+        <button class="circ-btn del"  onclick="deleteCircuit(${c.id})">DEL</button>
+      </div>`).join('');
+  }
+
+  // Render on load
+  renderCircuits();
+
+  // ════════════════════════════════════════════════════════════════
+  //  VIDEO DRILLS
+  // ════════════════════════════════════════════════════════════════
+
+  const DRILLS_KEY   = 'fenceCoachDrills';
+  let   activeFilters = new Set();
+  let   editingDrillId = null;  // null = new drill, number = editing existing
+  let   pendingDeleteId = null;
+
+  // Active modal tag selections
+  let modalTags = { epee:false, foil:false, footwork:false, bladework:false, other:false };
+
+  function loadDrills() {
+    try { return JSON.parse(localStorage.getItem(DRILLS_KEY)) || []; }
+    catch { return []; }
+  }
+
+  function persistDrills(drills) {
+    localStorage.setItem(DRILLS_KEY, JSON.stringify(drills));
+  }
+
+  // Extract YouTube video ID from various URL formats
+  function extractVideoId(url) {
+    const patterns = [
+      /[?&]v=([a-zA-Z0-9_-]{11})/,
+      /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+      /embed\/([a-zA-Z0-9_-]{11})/,
+      /shorts\/([a-zA-Z0-9_-]{11})/,
+    ];
+    for (const p of patterns) {
+      const m = url.match(p);
+      if (m) return m[1];
+    }
+    return null;
+  }
+
+  function thumbUrl(videoId) {
+    return `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+  }
+
+  // ── Modal ────────────────────────────────────────────────────────
+  function openDrillModal(id = null) {
+    editingDrillId = id;
+    modalTags = { epee:false, foil:false, footwork:false, bladework:false, other:false };
+
+    document.getElementById('modalTitle').textContent = id ? 'EDIT DRILL' : 'ADD DRILL';
+    document.getElementById('drillTitleInput').value = '';
+    document.getElementById('drillLinkInput').value  = '';
+    document.getElementById('modalError').style.display = 'none';
+
+    // Reset tag buttons
+    ['epee','foil','footwork','bladework','other'].forEach(t => {
+      document.getElementById('tag' + t.charAt(0).toUpperCase() + t.slice(1))
+        .classList.remove('selected');
+    });
+
+    if (id !== null) {
+      const drill = loadDrills().find(d => d.id === id);
+      if (drill) {
+        document.getElementById('drillTitleInput').value = drill.title;
+        document.getElementById('drillLinkInput').value  = drill.url;
+        drill.tags.forEach(t => {
+          modalTags[t] = true;
+          const btn = document.getElementById('tag' + t.charAt(0).toUpperCase() + t.slice(1));
+          if (btn) btn.classList.add('selected');
+        });
+      }
+    }
+
+    document.getElementById('drillModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('drillTitleInput').focus(), 100);
+  }
+
+  function closeDrillModal() {
+    document.getElementById('drillModal').style.display = 'none';
+    editingDrillId = null;
+  }
+
+  function modalOverlayClick(e) {
+    if (e.target === document.getElementById('drillModal')) closeDrillModal();
+  }
+
+  function toggleTag(tag) {
+    modalTags[tag] = !modalTags[tag];
+    const key = tag.charAt(0).toUpperCase() + tag.slice(1);
+    document.getElementById('tag' + key).classList.toggle('selected', modalTags[tag]);
+  }
+
+  function saveDrill() {
+    const title = document.getElementById('drillTitleInput').value.trim();
+    const url   = document.getElementById('drillLinkInput').value.trim();
+    const errEl = document.getElementById('modalError');
+
+    if (!title) { errEl.textContent = 'Please enter a title.'; errEl.style.display = 'block'; return; }
+    if (!url)   { errEl.textContent = 'Please enter a YouTube URL.'; errEl.style.display = 'block'; return; }
+
+    const videoId = extractVideoId(url);
+    if (!videoId) { errEl.textContent = 'Could not find a YouTube video ID in that URL.'; errEl.style.display = 'block'; return; }
+
+    errEl.style.display = 'none';
+
+    const tags = Object.entries(modalTags).filter(([,v]) => v).map(([k]) => k);
+    const drills = loadDrills();
+
+    if (editingDrillId !== null) {
+      const idx = drills.findIndex(d => d.id === editingDrillId);
+      if (idx !== -1) { drills[idx] = { ...drills[idx], title, url, videoId, tags }; }
+    } else {
+      drills.push({ id: Date.now(), title, url, videoId, tags });
+    }
+
+    persistDrills(drills);
+    closeDrillModal();
+    renderDrills();
+  }
+
+  // ── Filter ───────────────────────────────────────────────────────
+  function toggleFilter(btn) {
+    const f = btn.dataset.filter;
+    if (activeFilters.has(f)) { activeFilters.delete(f); btn.classList.remove('active'); }
+    else                       { activeFilters.add(f);    btn.classList.add('active'); }
+    renderDrills();
+  }
+
+  // ── Delete ───────────────────────────────────────────────────────
+  function promptDelete(id) {
+    const drill = loadDrills().find(d => d.id === id);
+    if (!drill) return;
+    pendingDeleteId = id;
+    document.getElementById('deleteConfirmText').textContent =
+      `"${drill.title}" will be permanently removed.`;
+    document.getElementById('deleteModal').style.display = 'flex';
+  }
+
+  function confirmDelete() {
+    if (pendingDeleteId === null) return;
+    const drills = loadDrills().filter(d => d.id !== pendingDeleteId);
+    persistDrills(drills);
+    pendingDeleteId = null;
+    document.getElementById('deleteModal').style.display = 'none';
+    renderDrills();
+  }
+
+  function closeDeleteModal() {
+    pendingDeleteId = null;
+    document.getElementById('deleteModal').style.display = 'none';
+  }
+
+  // ── Tag icons ────────────────────────────────────────────────────
+  const TAG_ICONS = {
+    epee:      { cls:'epee',      html:'E' },
+    foil:      { cls:'foil',      html:'F' },
+    footwork:  { cls:'footwork',  html:'👣' },
+    bladework: { cls:'bladework', html:'⚔' },
+    other:     { cls:'other',     html:'🔧' },
+  };
+
+  // ── Render ───────────────────────────────────────────────────────
+  function renderDrills() {
+    const drills    = loadDrills();
+    const query     = (document.getElementById('drillSearch').value || '').toLowerCase().trim();
+    const list      = document.getElementById('drillsList');
+    const hasWeapon = ['epee','foil'].some(f => activeFilters.has(f));
+    const hasCat    = ['footwork','bladework','other'].some(f => activeFilters.has(f));
+
+    let filtered = drills.filter(d => {
+      // Keyword search
+      if (query && !d.title.toLowerCase().includes(query)) return false;
+      // Weapon filter (OR within group)
+      if (hasWeapon && !['epee','foil'].some(f => activeFilters.has(f) && d.tags.includes(f))) return false;
+      // Category filter (OR within group)
+      if (hasCat && !['footwork','bladework','other'].some(f => activeFilters.has(f) && d.tags.includes(f))) return false;
+      return true;
+    });
+
+    // Alphabetical
+    filtered.sort((a, b) => a.title.localeCompare(b.title));
+
+    if (filtered.length === 0) {
+      list.innerHTML = drills.length === 0
+        ? '<div class="drills-empty">No drills yet — tap + ADD DRILL to get started</div>'
+        : '<div class="drills-empty">No drills match your search or filters</div>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(d => {
+      const tagHtml = d.tags.map(t => {
+        const icon = TAG_ICONS[t];
+        return icon ? `<span class="drill-tag ${icon.cls}" title="${t}">${icon.html}</span>` : '';
+      }).join('');
+
+      const thumbHtml = d.videoId
+        ? `<img class="drill-thumb" src="${thumbUrl(d.videoId)}" alt="" loading="lazy"
+             onerror="this.outerHTML='<div class=\\'drill-thumb-placeholder\\'>🎬</div>'">`
+        : '<div class="drill-thumb-placeholder">🎬</div>';
+
+      return `
+        <div class="drill-card">
+          ${thumbHtml}
+          <div class="drill-content">
+            <a class="drill-link" href="${d.url}" target="_blank" rel="noopener">${d.title}</a>
+            <div class="drill-tags">${tagHtml}</div>
+          </div>
+          <div class="drill-actions">
+            <button class="drill-action-btn" title="Edit" onclick="openDrillModal(${d.id})">✏️</button>
+            <button class="drill-action-btn" title="Delete" onclick="promptDelete(${d.id})">🗑️</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // Initial render
+  renderDrills();
+
+</script>
+</body>
+</html>
